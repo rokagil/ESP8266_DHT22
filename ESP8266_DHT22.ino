@@ -53,7 +53,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
 
-long lastMsg = 0;
+String outTopic, inTopic;
+
+unsigned long lastMsg = 120 * 1000;
 
 
 void resetSettings()
@@ -77,7 +79,7 @@ void reconnect()
     {
       Serial.println("connected");
       client.publish("outTopic", "hello world");
-      client.subscribe("someTopic");
+      client.subscribe(inTopic.c_str());
     }
     else
     {
@@ -206,43 +208,40 @@ void setup()
   client.setServer(server, atol(mqtt_port));
   client.setCallback(callback);
 
-
   Serial.println();
   Serial.println(WiFi.macAddress());
   Serial.println(WiFi.hostname());
 
-  Serial.println("Status\tHumidity (%)\tTemperature (C)\t(F)");
+  outTopic = String(WiFi.hostname() + "/measurement");
+  inTopic = String(WiFi.hostname() + "/config");
+
+  Serial.println("Humidity\tTemperature");
 }
 
 
 void loop()
 {
-  delay(2000);
-
-  float humidity = dht.readHumidity();
-  float temperature = dht.readTemperature();
-
-  Serial.print(humidity, 1);
-  Serial.print("\t\t");
-  Serial.println(temperature, 1);
-
   if (!client.connected())
   {
     reconnect();
   }
   client.loop();
 
-  long now = millis();
+  unsigned long now = millis();
   if(now - lastMsg > 60 * 1000)
   {
     lastMsg = now;
 
-    float humidity = dht.readHumidity();
-    float temperature = dht.readTemperature();
+    float humidity, temperature;
+    do {
+      delay(2000);
+      humidity = dht.readHumidity();
+      temperature = dht.readTemperature();
 
-    Serial.print(humidity, 1);
-    Serial.print("\t\t");
-    Serial.println(temperature, 1);
+      Serial.print(humidity, 1);
+      Serial.print("\t\t");
+      Serial.println(temperature, 1);
+    } while(std::isnan(temperature) || std::isnan(humidity));
 
     StaticJsonBuffer<50> jsonBuffer;
     JsonObject& json = jsonBuffer.createObject();
@@ -250,6 +249,6 @@ void loop()
     json["temperature"] = temperature;
     char buffer[50];
     json.printTo(buffer, sizeof(buffer));
-    client.publish("outTopic", buffer);
+    client.publish(outTopic.c_str(), buffer);
   }
 }
